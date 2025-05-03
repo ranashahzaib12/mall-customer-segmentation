@@ -2,78 +2,65 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
-import seaborn as sns
 
-# -------------------- SETUP --------------------
-st.set_page_config(page_title="Customer Segmentation", layout="centered")
-st.title("🧠 Customer Segmentation with Clustering")
-st.markdown("Predict customer clusters using **KMeans** and visualize them in **PCA space**.")
+# Load models
 
-# -------------------- LOAD MODELS --------------------
-@st.cache_resource
-def load_models():
-    scaler = pickle.load(open("scaler.pkl", "rb"))
-    pca = pickle.load(open("pca_model.pkl", "rb"))
-    kmeans = pickle.load(open("kmeans_model.pkl", "rb"))
-    return scaler, pca, kmeans
+scaler = pickle.load(open("scaler.pkl", "rb"))
+pca = pickle.load(open("pca_model.pkl", "rb"))
+kmeans = pickle.load(open("kmeans_model.pkl", "rb"))
 
-scaler, pca_model, kmeans_model = load_models()
+# Page setup
+st.set_page_config(page_title="Mall Customer Segmentation", layout="centered")
+st.title("🛍️ Mall Customer Segmentation")
+st.markdown("""
+Predicts which customer group a person falls into using **KMeans Clustering**  
+based on **Gender, Age, Annual Income, and Spending Score**.
+""")
 
-# -------------------- USER INPUT --------------------
-st.sidebar.header("Enter Customer Details")
+# Sidebar input
 
+st.sidebar.header("🧾 Customer Info")
 gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
-age = st.sidebar.slider("Age", 15, 70, 30)
-income = st.sidebar.slider("Annual Income", 15, 150, 60)
+gender_value = 1 if gender == "Male" else 0
+
+age = st.sidebar.slider("Age", 18, 70, 30)
+income = st.sidebar.slider("Annual Income", 10, 150, 60)
 score = st.sidebar.slider("Spending Score", 1, 100, 50)
 
-if st.sidebar.button("Predict Cluster"):
-    # -------------------- PREDICT --------------------
-    gender_encoded = 1 if gender == "Male" else 0
-    user_input = np.array([[gender_encoded, age, income, score]])
-    scaled_input = scaler.transform(user_input)
-    cluster = kmeans_model.predict(scaled_input)[0]
-    pca_input = pca_model.transform(scaled_input)
+# Prediction
 
-    st.subheader("🎯 Prediction Result")
-    st.write(f"The customer is predicted to belong to **Cluster {cluster}**.")
+# Prediction
+if st.sidebar.button("🔍 Segment Customer"):
+    columns = ['Gender', 'Age', 'Annual Income', 'Spending Score']
+    input_df = pd.DataFrame([[gender_value, age, income, score]], columns=columns)
+    input_scaled = scaler.transform(input_df)
+    cluster = kmeans.predict(input_scaled)[0]
 
-    # -------------------- CLUSTER VISUALIZATION --------------------
-    st.subheader("📊 PCA Cluster Visualization")
 
-    # Generate data for plotting
-    # Load sample data used during training if available
-    try:
-        df = pd.read_csv("Mall_Customers.csv")
-        df['Gender'] = df['Gender'].map({'Male': 1, 'Female': 0})
-        features = df[['Gender', 'Age', 'Annual Income', 'Spending Score']]
-        features.columns = ['Gender', 'Age', 'Annual Income', 'Spending Score']
-        X_scaled = scaler.transform(features)
-        X_pca = pca_model.transform(X_scaled)
-        clusters = kmeans_model.predict(X_scaled)
+    st.success(f"🎯 This customer belongs to **Cluster {cluster}**")
 
-        plot_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
-        plot_df["Cluster"] = clusters
+# Optional Visualization
+st.markdown("### 🧠 Cluster Projection using PCA")
 
-        # Add user input to the plot
-        user_df = pd.DataFrame(pca_input, columns=["PC1", "PC2"])
-        user_df["Cluster"] = ["User Input"]
+sample_data = pd.DataFrame({
+    'Gender': [0, 1, 1, 0, 0, 1, 0, 1, 0, 1],
+    'Age': [19, 21, 35, 40, 23, 31, 50, 22, 65, 29],
+    'Annual Income': [15, 80, 35, 130, 45, 65, 90, 100, 120, 55],
+    'Spending Score': [39, 81, 6, 77, 40, 76, 6, 94, 3, 72]
+})
 
-        # Plotting
-        plt.figure(figsize=(8, 6))
-        sns.scatterplot(data=plot_df, x="PC1", y="PC2", hue="Cluster", palette="Set1", alpha=0.6)
-        plt.scatter(user_df["PC1"], user_df["PC2"], c='black', s=150, marker='X', label='User')
-        plt.legend()
-        plt.title("PCA Clusters with User Input")
-        st.pyplot(plt)
+sample_scaled = scaler.transform(sample_data)
+sample_pca = pca.transform(sample_scaled)
+sample_clusters = kmeans.predict(sample_scaled)
 
-    except FileNotFoundError:
-        st.warning("Training data not found. Please ensure 'Mall_Customers.csv' is available.")
+input_pca = pca.transform(input_scaled)
 
-# -------------------- FOOTER --------------------
-st.markdown("---")
-st.markdown("Made with ❤️ using Streamlit")
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.scatter(sample_pca[:, 0], sample_pca[:, 1], c=sample_clusters, cmap='tab10', alpha=0.6)
+ax.scatter(input_pca[0, 0], input_pca[0, 1], color='red', s=200, edgecolors='black', label='New Customer')
+ax.set_title("Customer Clusters (PCA Projection)")
+ax.set_xlabel("Principal Component 1")
+ax.set_ylabel("Principal Component 2")
+ax.legend()
+st.pyplot(fig)
